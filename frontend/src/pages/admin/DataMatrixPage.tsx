@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguageStore } from '../../stores/languageStore';
@@ -6,7 +6,7 @@ import { proposalsApi, type MatrixRow, type AdminFieldsUpdate } from '../../serv
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { toast } from '../../components/ui/Toast';
-import { ArrowLeft, Download, Check, X, Pencil } from 'lucide-react';
+import { ArrowLeft, Download, Check, X, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ADMIN_FIELDS = [
   { key: 'ticketStatus', dbKey: 'ticket_status', i18n: 'matrix.ticketStatus' },
@@ -42,6 +42,20 @@ const PASSENGER_COLS = [
   { key: 'phone', i18n: 'passenger.phone' },
   { key: 'email', i18n: 'passenger.email' },
 ] as const;
+
+function DebugButton() {
+  const { id } = useParams<{ id: string }>();
+  const { data: rows } = useQuery({
+    queryKey: ['proposal-matrix', id],
+    queryFn: () => proposalsApi.getMatrix(id!),
+    enabled: !!id,
+  });
+  return (
+    <button onClick={() => console.log(rows?.[0])} className="text-xs text-primary-500 hover:text-primary-700">
+      Debug
+    </button>
+  );
+}
 
 function EditableCell({ value, onSave, saving }: { value: string; onSave: (val: string) => void; saving: boolean }) {
   const [editing, setEditing] = useState(false);
@@ -94,6 +108,15 @@ export function DataMatrixPage() {
   const navigate = useNavigate();
   const t = useLanguageStore((s) => s.t);
   const queryClient = useQueryClient();
+  const [isOpen, setIsOpen] = useState(true);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight);
+    }
+  }, [contentRef.current]);
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ['proposal-matrix', id],
@@ -158,6 +181,7 @@ export function DataMatrixPage() {
         <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows || rows.length === 0}>
           <Download className="h-4 w-4 mr-2" /> {t('matrix.exportCsv')}
         </Button>
+        <DebugButton />
       </div>
 
       <div className="flex flex-wrap gap-4 mb-4 text-xs font-medium">
@@ -171,53 +195,74 @@ export function DataMatrixPage() {
           {t('matrix.noData')}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 shadow-md">
-          <table className="text-xs whitespace-nowrap">
-            <thead>
-              <tr>
-                {SALES_COLS.map((col) => (
-                  <th key={col.key} className="px-3 py-2.5 text-left font-semibold text-blue-800 bg-blue-50 border-b border-blue-200 sticky top-0">
-                    {'label' in col ? col.label : t(col.i18n)}
-                  </th>
-                ))}
-                {PASSENGER_COLS.map((col) => (
-                  <th key={col.key} className="px-3 py-2.5 text-left font-semibold text-green-800 bg-green-50 border-b border-green-200 sticky top-0">
-                    {t(col.i18n)}
-                  </th>
-                ))}
-                {ADMIN_FIELDS.map((col) => (
-                  <th key={col.key} className="px-3 py-2.5 text-left font-semibold text-amber-800 bg-amber-50 border-b border-amber-200 sticky top-0">
-                    {t(col.i18n)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={row.slotId || i} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
-                  {SALES_COLS.map((col) => (
-                    <td key={col.key} className="px-3 py-2 bg-blue-50/30 text-neutral-800">{String(row[col.key as keyof MatrixRow] ?? '')}</td>
-                  ))}
-                  {PASSENGER_COLS.map((col) => (
-                    <td key={col.key} className="px-3 py-2 bg-green-50/30 text-neutral-800">
-                      {col.key === 'slotIndex' ? String((row.slotIndex ?? 0) + 1) : String(row[col.key as keyof MatrixRow] ?? '')}
-                    </td>
-                  ))}
-                  {ADMIN_FIELDS.map((col) => (
-                    <td key={col.key} className="px-3 py-2 bg-amber-50/30">
-                      <EditableCell
-                        value={String(row[col.key as keyof MatrixRow] ?? '')}
-                        onSave={(val) => handleAdminFieldSave(row.slotId, col.dbKey, val)}
-                        saving={updateMutation.isPending}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        <div className="rounded-lg border border-neutral-200 shadow-md bg-white"> 
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left font-semibold text-neutral-800 hover:bg-neutral-50 transition-colors"
+            >
+             <span>Teste</span>
+           {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+           </button>
+           <div
+              ref={contentRef}
+              style={{
+                height: isOpen
+                  ? contentRef.current
+                    ? `${contentRef.current.scrollHeight}px`
+                    : 'auto'
+                  : '0px',
+              }}
+              className="overflow-hidden transition-[height] duration-300 ease-in-out"
+            >
+              <div className="overflow-x-auto border-t border-neutral-200">
+                <table className="text-xs whitespace-nowrap">
+                  <thead>
+                    <tr>
+                      {SALES_COLS.map((col) => (
+                        <th key={col.key} className="px-3 py-2.5 text-left font-semibold text-blue-800 bg-blue-50 border-b border-blue-200 sticky top-0">
+                          {'label' in col ? col.label : t(col.i18n)}
+                        </th>
+                      ))}
+                      {PASSENGER_COLS.map((col) => (
+                        <th key={col.key} className="px-3 py-2.5 text-left font-semibold text-green-800 bg-green-50 border-b border-green-200 sticky top-0">
+                          {t(col.i18n)}
+                        </th>
+                      ))}
+                      {ADMIN_FIELDS.map((col) => (
+                        <th key={col.key} className="px-3 py-2.5 text-left font-semibold text-amber-800 bg-amber-50 border-b border-amber-200 sticky top-0">
+                          {t(col.i18n)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={row.slotId || i} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
+                        {SALES_COLS.map((col) => (
+                          <td key={col.key} className="px-3 py-2 bg-blue-50/30 text-neutral-800">{String(row[col.key as keyof MatrixRow] ?? '')}</td>
+                        ))}
+                        {PASSENGER_COLS.map((col) => (
+                          <td key={col.key} className="px-3 py-2 bg-green-50/30 text-neutral-800">
+                            {col.key === 'slotIndex' ? String((row.slotIndex ?? 0) + 1) : String(row[col.key as keyof MatrixRow] ?? '')}
+                          </td>
+                        ))}
+                        {ADMIN_FIELDS.map((col) => (
+                          <td key={col.key} className="px-3 py-2 bg-amber-50/30">
+                            <EditableCell
+                              value={String(row[col.key as keyof MatrixRow] ?? '')}
+                              onSave={(val) => handleAdminFieldSave(row.slotId, col.dbKey, val)}
+                              saving={updateMutation.isPending}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              </div>
+          </div>         
+        )}
     </div>
   );
 }
